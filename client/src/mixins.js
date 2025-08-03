@@ -3,9 +3,12 @@ import axios from 'axios';
 export default {
   methods: {
     async $api(url, data) {
+      const baseURL = process.env.VUE_APP_API_BASE_URL || 'http://127.0.0.1:3000';
+      const fullUrl = url.startsWith('http') ? url : `${baseURL}${url}`;
+      
       return (await axios({
         method: 'post',
-        url,
+        url: fullUrl,
         data
       }).catch(e => {
         console.log(e);

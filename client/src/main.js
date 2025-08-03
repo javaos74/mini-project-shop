@@ -19,4 +19,4 @@ app.use(store);
 app.use(VueSweetalert2);
 app.mount('#app');
 
-window.Kakao.init("d5cc1b5a3e8636bc01917b25cd43b870");
+window.Kakao.init(process.env.VUE_APP_KAKAO_KEY || "d5cc1b5a3e8636bc01917b25cd43b870");
