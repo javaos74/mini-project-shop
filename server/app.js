@@ -1,7 +1,9 @@
+require('dotenv').config();
 const express = require('express');
 const app = express();
 const session = require('express-session');
 const fs = require('fs');
+const cors = require('cors');
 
 app.use(session({
   secret: 'secret code',
@@ -17,8 +19,58 @@ app.use(express.json({
   limit: '50mb'
 }));
 
-const server = app.listen(3000, () => {
-  console.log('Server started. port 3000.');
+// CORS 설정
+const corsOptions = {
+  origin: function (origin, callback) {
+    // 환경변수에서 허용할 도메인 목록 가져오기
+    const allowedOriginsFromEnv = process.env.ALLOWED_ORIGINS 
+      ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+      : [];
+    
+    // 기본 허용 도메인 + 환경변수 도메인
+    const allowedOrigins = [
+      ...allowedOriginsFromEnv,
+      // S3 정적 웹사이트 호스팅 URL 패턴
+      /^https:\/\/.*\.s3-website.*\.amazonaws\.com$/,
+      // CloudFront URL 패턴
+      /^https:\/\/.*\.cloudfront\.net$/,
+    ];
+    
+    // 개발 환경에서는 origin이 undefined일 수 있음 (Postman, 서버 간 통신 등)
+    if (!origin && process.env.NODE_ENV === 'development') {
+      return callback(null, true);
+    }
+    
+    // 문자열 또는 정규식으로 origin 체크
+    const isAllowed = allowedOrigins.some(allowedOrigin => {
+      if (typeof allowedOrigin === 'string') {
+        return allowedOrigin === origin;
+      } else if (allowedOrigin instanceof RegExp) {
+        return allowedOrigin.test(origin);
+      }
+      return false;
+    });
+    
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      console.log(`CORS blocked origin: ${origin}`);
+      callback(new Error(`Not allowed by CORS: ${origin}`));
+    }
+  },
+  credentials: true, // 쿠키, 인증 헤더 허용
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  optionsSuccessStatus: 200 // IE11 지원
+};
+
+app.use(cors(corsOptions));
+
+const PORT = process.env.PORT || 3000;
+const server = app.listen(PORT, () => {
+  console.log(`Server started. port ${PORT}.`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Allowed origins: ${process.env.ALLOWED_ORIGINS || 'default patterns'}`);
 });
 
 let sql = require('./sql.js');
