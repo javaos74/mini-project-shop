@@ -29,21 +29,26 @@ fs.watchFile(__dirname + '/sql.js', (curr, prev) => {
   sql = require('./sql.js');
 });
 
-const db = {
-  database: "dev_class",
-  connectionLimit: 10,
-  host: "192.168.219.102",
-  user: "root",
-  password: "mariadb"
-};
+const sqlite3 = require('sqlite3').verbose();
+const path = require('path');
 
-const dbPool = require('mysql').createPool(db);
+// SQLite 데이터베이스 연결
+const dbPath = path.join(__dirname, 'dev_class.db');
+
+// 데이터베이스 파일이 없으면 자동으로 초기화
+if (!fs.existsSync(dbPath)) {
+  console.log('Database file not found. Please run "npm run restore-data" first.');
+}
+
+const db = new sqlite3.Database(dbPath);
 
 app.post('/api/login', async (request, res) => {
-  // request.session['email'] = 'seungwon.go@gmail.com';
-  // res.send('ok');
   try {
-    await req.db('signUp', request.body.param);
+    const userInfo = request.body.param[0];
+    const params = [userInfo.email, 1, userInfo.nickname];
+
+    await req.db('signUp', params);
+
     if (request.body.param.length > 0) {
       for (let key in request.body.param[0]) request.session[key] = request.body.param[0][key];
       res.send(request.body.param[0]);
@@ -79,11 +84,7 @@ app.post('/upload/:productId/:type/:fileName', async (request, res) => {
   const data = request.body.data.slice(request.body.data.indexOf(';base64,') + 8);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir);
   fs.writeFile(file, data, 'base64', async (error) => {
-    await req.db('productImageInsert', [{
-      product_id: productId,
-      type: type,
-      path: fileName
-    }]);
+    await req.db('productImageInsert', [productId, type, fileName]);
 
     if (error) {
       res.send({
@@ -127,7 +128,24 @@ app.post('/apirole/:alias', async (request, res) => {
 
 app.post('/api/:alias', async (request, res) => {
   try {
-    res.send(await req.db(request.params.alias, request.body.param, request.body.where));
+    let params = request.body.param;
+
+    // productInsert의 경우 객체를 배열로 변환
+    if (request.params.alias === 'productInsert' && params && params[0]) {
+      const product = params[0];
+      params = [
+        product.product_name,
+        product.product_price,
+        product.delivery_price,
+        product.add_delivery_price,
+        product.tags,
+        product.outbound_days,
+        product.seller_id,
+        product.category_id
+      ];
+    }
+
+    res.send(await req.db(request.params.alias, params, request.body.where));
   } catch (err) {
     res.status(500).send({
       error: err
@@ -137,14 +155,34 @@ app.post('/api/:alias', async (request, res) => {
 
 const req = {
   async db(alias, param = [], where = '') {
-    return new Promise((resolve, reject) => dbPool.query(sql[alias].query + where, param, (error, rows) => {
-      if (error) {
-        if (error.code != 'ER_DUP_ENTRY')
-          console.log(error);
-        resolve({
-          error
+    return new Promise((resolve, reject) => {
+      const query = sql[alias].query + where;
+
+      if (query.toLowerCase().includes('select')) {
+        db.all(query, param, (error, rows) => {
+          if (error) {
+            console.log(error);
+            resolve({ error });
+          } else {
+            resolve(rows || []);
+          }
         });
-      } else resolve(rows);
-    }));
+      } else {
+        db.run(query, param, function (error) {
+          if (error) {
+            if (error.code !== 'SQLITE_CONSTRAINT_UNIQUE') {
+              console.log(error);
+            }
+            resolve({ error });
+          } else {
+            resolve({
+              insertId: this.lastID,
+              affectedRows: this.changes,
+              id: this.lastID
+            });
+          }
+        });
+      }
+    });
   }
 };

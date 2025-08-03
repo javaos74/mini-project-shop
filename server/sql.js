@@ -20,10 +20,10 @@ module.exports = {
     query: `select * from t_image where product_id = ? and type = 2`
   },
   productInsert: {
-    query: `insert into t_product set ?`
+    query: `INSERT INTO t_product (product_name, product_price, delivery_price, add_delivery_price, tags, outbound_days, seller_id, category_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   },
   productImageInsert: {
-    query: `insert into t_image set ?`
+    query: `INSERT INTO t_image (product_id, type, path) VALUES (?, ?, ?)`
   },
   imageList: {
     query: `select * from t_image where product_id=?`
@@ -41,6 +41,6 @@ module.exports = {
     query: `select * from t_seller`
   },
   signUp: {
-    query: `insert into t_user set ? on duplicate key update ?`
+    query: `INSERT OR REPLACE INTO t_user (email, type, nickname) VALUES (?, ?, ?)`
   }
 }
